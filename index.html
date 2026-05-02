@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VaultDeal — Trustless Image Escrow</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js" crossorigin="anonymous"></script>
+  <script>if(typeof ethers==='undefined'){document.write('<scr'+'ipt src="https://unpkg.com/ethers@6.7.0/dist/ethers.umd.min.js"><\/scr'+'ipt>');}</script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════════════════════ */
+    :root {
+      --bg:         #0a0a08;
+      --bg2:        #111110;
+      --bg3:        #181817;
+      --border:     #2a2a27;
+      --border2:    #3a3a36;
+      --gold:       #c9a84c;
+      --gold2:      #e8c96a;
+      --gold-dim:   rgba(201,168,76,0.12);
+      --green:      #4ade80;
+      --green-dim:  rgba(74,222,128,0.1);
+      --red:        #f87171;
+      --red-dim:    rgba(248,113,113,0.1);
+      --blue:       #60a5fa;
+      --blue-dim:   rgba(96,165,250,0.1);
+      --text:       #e8e8e2;
+      --text2:      #a0a09a;
+      --text3:      #606058;
+      --serif:      'DM Serif Display', serif;
+      --mono:       'DM Mono', monospace;
+      --sans:       'DM Sans', sans-serif;
+      --r:          6px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grain overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.6;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       LAYOUT
+    ═══════════════════════════════════════════════════════════ */
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════════════════════ */
+    .sidebar {
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .logo {
+      font-family: var(--serif);
+      font-size: 22px;
+      color: var(--text);
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: var(--gold);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      color: var(--bg);
+      flex-shrink: 0;
+    }
+    .logo-tagline {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 32px;
+    }
+
+    /* Wallet area */
+    .wallet-area {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 14px;
+      margin-bottom: 28px;
+    }
+    .wallet-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text3);
+      margin-bottom: 6px;
+    }
+    .wallet-addr {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--gold);
+      word-break: break-all;
+      line-height: 1.5;
+      display: none;
+    }
+    .wallet-net {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      margin-top: 4px;
+      display: none;
+    }
+
+    #btn-connect, #btn-switch-wallet {
+      width: 100%;
+      background: var(--gold-dim);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 9px;
+      cursor: pointer;
+      border-radius: var(--r);
+      transition: background 0.2s;
+      margin-top: 6px;
+    }
+    #btn-connect:hover, #btn-switch-wallet:hover { background: rgba(201,168,76,0.22); }
+    #btn-connect:disabled, #btn-switch-wallet:disabled { opacity: 0.4; cursor: default; }
+
+    .wallet-role-badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 20px;
+      margin-bottom: 6px;
+    }
+    .wallet-role-badge.seller {
+      background: rgba(59,130,246,0.18);
+      color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.4);
+    }
+    .wallet-role-badge.buyer {
+      background: rgba(16,185,129,0.18);
+      color: #34d399;
+      border: 1px solid rgba(16,185,129,0.4);
+    }
+    .wallet-role-badge.unknown {
+      background: rgba(201,168,76,0.12);
+      color: var(--gold);
+      border: 1px solid rgba(201,168,76,0.3);
+    }
+
+    .wallet-slots {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .wallet-slot {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: calc(var(--r) - 2px);
+      padding: 6px 8px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .wallet-slot:hover { border-color: var(--gold); }
+    .wallet-slot.active { border-color: var(--gold); background: var(--gold-dim); }
+    .wallet-slot-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text3);
+      flex-shrink: 0;
+    }
+    .wallet-slot.active .wallet-slot-dot { background: var(--gold); }
+    .wallet-slot-info { flex: 1; min-width: 0; }
+    .wallet-slot-addr {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .wallet-slot-role {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .wallet-slot.active .wallet-slot-addr { color: var(--gold); }
+
+    /* Nav */
+    .nav-section { margin-bottom: 28px; }
+    .nav-title {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text3);
+      margin-bottom: 8px;
+      padding-left: 4px;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      background: none;
+      border: none;
+      color: var(--text2);
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 400;
+      padding: 9px 10px;
+      cursor: pointer;
+      border-radius: var(--r);
+      transition: background 0.15s, color 0.15s;
+      text-align: left;
+    }
+    .nav-btn:hover { background: var(--bg3); color: var(--text); }
+    .nav-btn.active { background: var(--gold-dim); color: var(--gold); font-weight: 500; }
+    .nav-btn .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+    /* Contract info */
+    .contract-info {
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .contract-chip {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text3);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+    .contract-chip span { color: var(--text2); display: block; margin-bottom: 2px; font-size: 8px; text-transform: uppercase; letter-spacing: 0.1em; }
+
+    /* ═══════════════════════════════════════════════════════════
+       MAIN CONTENT
+    ═══════════════════════════════════════════════════════════ */
+    .main {
+      padding: 36px 40px 80px;
+      max-width: 900px;
+    }
+
+    /* Views */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .view-header {
+      margin-bottom: 36px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .view-header h1 {
+      font-family: var(--serif);
+      font-size: 32px;
+      font-weight: 400;
+      color: var(--text);
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+    .view-header h1 em { font-style: italic; color: var(--gold); }
+    .view-header p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       CARDS
+    ═══════════════════════════════════════════════════════════ */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px;
+      margin-bottom: 20px;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: var(--border2); }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .card-icon {
+      width: 32px; height: 32px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .card-head h2 {
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 400;
+      color: var(--text);
+    }
+    .card-head p {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 1px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       FORM ELEMENTS
+    ═══════════════════════════════════════════════════════════ */
+    .field { margin-bottom: 18px; }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text3);
+      margin-bottom: 7px;
+    }
+
+    .field input[type="text"],
+    .field input[type="number"],
+    .field textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+      resize: vertical;
+    }
+    .field input:focus,
+    .field textarea:focus { border-color: var(--gold); }
+    .field input::placeholder,
+    .field textarea::placeholder { color: var(--text3); }
+
+    .field-hint {
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 5px;
+      line-height: 1.5;
+    }
+
+    /* Row of fields */
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       BUTTONS
+    ═══════════════════════════════════════════════════════════ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 22px;
+      border-radius: var(--r);
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.35; cursor: default; transform: none; }
+
+    .btn-gold { background: var(--gold); color: var(--bg); }
+    .btn-outline { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
+    .btn-outline:hover { border-color: var(--text2); color: var(--text); opacity: 1; }
+    .btn-green { background: var(--green); color: #0a1a10; }
+    .btn-red { background: var(--red); color: #1a0a0a; }
+    .btn-sm { padding: 7px 14px; font-size: 12px; }
+    .btn-full { width: 100%; }
+
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* Spinner inside button */
+    .btn .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .btn.loading .spinner { display: block; }
+    .btn.loading .btn-text { opacity: 0.7; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ═══════════════════════════════════════════════════════════
+       IMAGE UPLOAD ZONE
+    ═══════════════════════════════════════════════════════════ */
+    .upload-zone {
+      border: 2px dashed var(--border2);
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      background: var(--bg);
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--gold);
+      background: var(--gold-dim);
+    }
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .upload-zone-icon { font-size: 32px; margin-bottom: 10px; }
+    .upload-zone-text {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+    .upload-zone-text strong { color: var(--gold); }
+    .upload-zone-sub {
+      font-size: 11px;
+      color: var(--text3);
+      font-family: var(--mono);
+      margin-top: 4px;
+    }
+
+    /* Preview thumbnail */
+    .img-preview-wrap {
+      position: relative;
+      display: none;
+      margin-bottom: 16px;
+    }
+    .img-preview-wrap.visible { display: block; }
+
+    .img-preview {
+      width: 100%;
+      max-height: 280px;
+      object-fit: contain;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      display: block;
+
+      /* Screenshot protection */
+      -webkit-user-select: none;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .img-preview-overlay {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 12px,
+        rgba(201,168,76,0.04) 12px,
+        rgba(201,168,76,0.04) 13px
+      );
+      border-radius: 6px;
+      pointer-events: none;
+    }
+
+    /* Watermark overlay on buyer preview */
+    .img-protected {
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .img-protected::after {
+      content: 'PREVIEW ONLY · NOT FOR DISTRIBUTION · VAULTDEAL';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-30deg);
+      font-family: var(--mono);
+      font-size: clamp(10px, 2vw, 16px);
+      color: rgba(201,168,76,0.35);
+      white-space: nowrap;
+      pointer-events: none;
+      letter-spacing: 0.15em;
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       STATUS BADGES
+    ═══════════════════════════════════════════════════════════ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .badge::before { content: '●'; font-size: 7px; }
+    .badge-awaiting  { background: var(--blue-dim);  color: var(--blue); }
+    .badge-funded    { background: var(--green-dim); color: var(--green); }
+    .badge-rejected  { background: var(--red-dim);   color: var(--red); }
+    .badge-cancelled { background: rgba(100,100,90,0.15); color: var(--text3); }
+
+    /* ═══════════════════════════════════════════════════════════
+       DEAL CARDS (list)
+    ═══════════════════════════════════════════════════════════ */
+    .deal-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .deal-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.15s;
+    }
+    .deal-card:hover { border-color: var(--gold); background: var(--bg3); }
+
+    .deal-card-id {
+      font-family: var(--mono);
+      font-size: 18px;
+      color: var(--gold);
+      font-weight: 500;
+      min-width: 36px;
+      text-align: center;
+    }
+    .deal-card-body { flex: 1; min-width: 0; }
+    .deal-card-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .deal-card-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .deal-card-price {
+      font-family: var(--mono);
+      font-size: 15px;
+      color: var(--gold);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .deal-card-arrow { color: var(--text3); font-size: 16px; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text3);
+    }
+    .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; line-height: 1.7; }
+
+    /* ═══════════════════════════════════════════════════════════
+       DEAL DETAIL
+    ═══════════════════════════════════════════════════════════ */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .detail-item {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 12px 14px;
+    }
+    .detail-item-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text3);
+      margin-bottom: 5px;
+    }
+    .detail-item-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .detail-item-value.highlight { color: var(--gold); font-size: 16px; }
+
+    /* ═══════════════════════════════════════════════════════════
+       SETUP / FACTORY LOAD
+    ═══════════════════════════════════════════════════════════ */
+    .setup-banner {
+      background: linear-gradient(135deg, rgba(201,168,76,0.08), rgba(201,168,76,0.03));
+      border: 1px solid rgba(201,168,76,0.3);
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 28px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .setup-banner-icon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
+    .setup-banner h3 {
+      font-family: var(--serif);
+      font-size: 17px;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+    .setup-banner p { font-size: 12px; color: var(--text2); line-height: 1.7; }
+
+    /* ═══════════════════════════════════════════════════════════
+       ACTIVITY LOG
+    ═══════════════════════════════════════════════════════════ */
+    .log-area {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      max-height: 180px;
+      overflow-y: auto;
+      line-height: 1.9;
+    }
+    .log-line { display: flex; gap: 10px; }
+    .log-line .log-ts { color: var(--text3); flex-shrink: 0; }
+    .log-line.ok   .log-msg { color: var(--green); }
+    .log-line.err  .log-msg { color: var(--red); }
+    .log-line.info .log-msg { color: var(--blue); }
+    .log-line.warn .log-msg { color: var(--gold); }
+
+    /* ═══════════════════════════════════════════════════════════
+       TOAST
+    ═══════════════════════════════════════════════════════════ */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .toast {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r);
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 340px;
+      animation: toastIn 0.25s ease;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .toast.ok   { border-color: var(--green); }
+    .toast.err  { border-color: var(--red); }
+    .toast.warn { border-color: var(--gold); }
+    .toast-icon { font-size: 15px; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       MODAL (for buyer image preview)
+    ═══════════════════════════════════════════════════════════ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      backdrop-filter: blur(4px);
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      max-width: 680px;
+      width: 100%;
+      overflow: hidden;
+      animation: modalIn 0.25s ease;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .modal-head {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-head h3 { font-family: var(--serif); font-size: 19px; color: var(--text); }
+    .modal-close {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .modal-close:hover { background: var(--border); }
+    .modal-body { padding: 24px; }
+
+    /* Protected image in modal */
+    .protected-img-container {
+      position: relative;
+      margin-bottom: 20px;
+      border-radius: 6px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .protected-img-container img {
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      -webkit-user-drag: none;
+    }
+    .protected-img-container .watermark-layer {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .protected-img-container .watermark-layer svg {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0; left: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       DIVIDER
+    ═══════════════════════════════════════════════════════════ */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 22px 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       STEP INDICATOR
+    ═══════════════════════════════════════════════════════════ */
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 28px;
+      overflow-x: auto;
+    }
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      min-width: 80px;
+    }
+    .step-circle {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: 1px solid var(--border2);
+      background: var(--bg3);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text3);
+      transition: all 0.3s;
+    }
+    .step-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text3);
+      text-align: center;
+      line-height: 1.3;
+    }
+    .step-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+      margin-bottom: 20px;
+      min-width: 20px;
+      transition: background 0.3s;
+    }
+    .step.active .step-circle { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
+    .step.done .step-circle { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+    .step.done + .step-line { background: var(--green); }
+
+    /* ═══════════════════════════════════════════════════════════
+       PRICE DISPLAY
+    ═══════════════════════════════════════════════════════════ */
+    .price-big {
+      text-align: center;
+      padding: 20px;
+      background: var(--gold-dim);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .price-big .price-amount {
+      font-family: var(--serif);
+      font-size: 36px;
+      color: var(--gold);
+      letter-spacing: -1px;
+    }
+    .price-big .price-unit {
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--text2);
+      margin-top: 3px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 740px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 18px 16px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .logo-tagline, .contract-info, .nav-section { display: none; }
+      .wallet-area { margin-bottom: 0; width: 200px; }
+      .main { padding: 24px 16px 60px; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .field-row { grid-template-columns: 1fr; }
+    }
+
+    /* Prevent right-click on images */
+    img { -webkit-user-drag: none; user-drag: none; }
+
+    /* ═══════════════════════════════════════════════════════════
+       SECTION HEADERS
+    ═══════════════════════════════════════════════════════════ */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text3);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Toast Container ─────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ─── Buyer Preview Modal ─────────────────────────────── -->
+<div class="modal-overlay" id="buyer-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>🔒 Protected Preview</h3>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="protected-img-container" id="modal-img-container">
+        <!-- image injected here -->
+      </div>
+      <div class="price-big">
+        <div class="price-amount" id="modal-price">—</div>
+        <div class="price-unit">SepoliaETH asking price</div>
+      </div>
+      <p style="font-size:12px;color:var(--text3);line-height:1.7;margin-bottom:18px;text-align:center;">
+        This image is protected. Screenshots are watermarked. Once you <strong style="color:var(--text)">Accept</strong>, 
+        payment is sent immediately to the seller. <strong style="color:var(--text)">Reject</strong> to terminate the deal.
+      </p>
+      <div class="btn-row" style="justify-content:center;">
+        <button class="btn btn-green" id="modal-accept" style="min-width:140px;">
+          <span class="spinner"></span>
+          <span class="btn-text">✓ Accept &amp; Pay</span>
+        </button>
+        <button class="btn btn-red" id="modal-reject" style="min-width:140px;">
+          <span class="spinner"></span>
+          <span class="btn-text">✕ Reject Deal</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── App Shell ────────────────────────────────────────── -->
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo"><span class="logo-icon">⬡</span> VaultDeal</div>
+    <div class="logo-tagline">Trustless Image Escrow · Sepolia</div>
+
+    <div class="wallet-area">
+      <div class="wallet-label">Active Wallet</div>
+      <div id="wallet-role-badge" class="wallet-role-badge" style="display:none"></div>
+      <div class="wallet-addr" id="wallet-addr">—</div>
+      <div class="wallet-net" id="wallet-net">—</div>
+      <button id="btn-connect">Connect Wallet</button>
+      <button id="btn-switch-wallet" style="display:none">⇄ Switch Account</button>
+      <div class="wallet-slots" id="wallet-slots"></div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-title">Navigate</div>
+      <button class="nav-btn active" data-view="setup">
+        <span class="nav-icon">⚙</span> Factory Setup
+      </button>
+      <button class="nav-btn" data-view="seller">
+        <span class="nav-icon">📤</span> Sell Image
+      </button>
+      <button class="nav-btn" data-view="buyer">
+        <span class="nav-icon">🛒</span> View Deal
+      </button>
+      <button class="nav-btn" data-view="my-deals">
+        <span class="nav-icon">📋</span> My Deals
+      </button>
+    </div>
+
+    <div class="contract-info">
+      <div class="contract-chip">
+        <span>Factory Address</span>
+        <span id="factory-addr-display">Not loaded</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ══════════════════════════════════════════════
+         VIEW: SETUP
+    ══════════════════════════════════════════════ -->
+    <div class="view active" id="view-setup">
+      <div class="view-header">
+        <h1>Factory <em>Setup</em></h1>
+        <p>Connect the VaultDeal factory contract. This is deployed <strong>once, forever</strong> — you never need to re-deploy for new deals.</p>
+      </div>
+
+      <!-- Deploy new factory -->
+      <div class="card" id="card-factory-deploy">
+        <div class="card-head">
+          <div class="card-icon">🚀</div>
+          <div>
+            <h2>Deploy New Factory</h2>
+            <p>First time setup — deploy the smart contract once to Sepolia</p>
+          </div>
+        </div>
+
+        <div class="setup-banner">
+          <div class="setup-banner-icon">💡</div>
+          <div>
+            <h3>One-time deployment</h3>
+            <p>This factory handles <em>unlimited</em> deals. You paste the bytecode once, deploy once, and save the address. Every future deal is just a function call — no new contract needed.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Contract Bytecode (from Remix compilation)</label>
+          <textarea id="input-bytecode" rows="4" placeholder="0x608060405234801561001057...  (paste full bytecode here)"></textarea>
+          <div class="field-hint">Compile <code>EscrowFactory.sol</code> in Remix → Copy "Bytecode" → paste here. You only do this once.</div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-gold" id="btn-deploy-factory">
+            <span class="spinner"></span>
+            <span class="btn-text">🚀 Deploy Factory</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Load existing factory -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">🔌</div>
+          <div>
+            <h2>Load Existing Factory</h2>
+            <p>Already deployed? Paste the address and connect</p>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Factory Contract Address</label>
+            <input type="text" id="input-factory-addr" placeholder="0x..." />
+          </div>
+          <div class="field" style="display:flex;align-items:flex-end;">
+            <button class="btn btn-gold btn-full" id="btn-load-factory">
+              <span class="spinner"></span>
+              <span class="btn-text">⬡ Connect Factory</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity log -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">📡</div>
+          <div><h2>Activity Log</h2><p>On-chain events &amp; status messages</p></div>
+        </div>
+        <div class="log-area" id="main-log">
+          <div class="log-line info"><span class="log-ts">--:--:--</span><span class="log-msg">Waiting for wallet connection…</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         VIEW: SELLER
+    ══════════════════════════════════════════════ -->
+    <div class="view" id="view-seller">
+      <div class="view-header">
+        <h1>Sell an <em>Image</em></h1>
+        <p>Upload your image, set a price, and specify the buyer's wallet. They'll see a watermarked preview and must pay to receive it.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">📸</div>
+          <div><h2>Upload &amp; Price</h2><p>Image is stored in your browser and referenced by hash on-chain</p></div>
+        </div>
+
+        <!-- Image upload -->
+        <div class="field">
+          <label>Your Image</label>
+          <div class="img-preview-wrap" id="seller-preview-wrap">
+            <img id="seller-preview-img" src="" alt="Preview" class="img-preview" />
+            <div class="img-preview-overlay"></div>
+          </div>
+          <div class="upload-zone" id="upload-zone">
+            <input type="file" id="input-image" accept="image/*" />
+            <div class="upload-zone-icon">🖼</div>
+            <div class="upload-zone-text"><strong>Click to browse</strong> or drag and drop</div>
+            <div class="upload-zone-sub">JPG, PNG, GIF, WEBP — max 5 MB</div>
+          </div>
+          <div class="field-hint" id="img-hash-display" style="display:none;">
+            🔒 Image Hash: <span id="img-hash-val" style="color:var(--gold);font-family:var(--mono);font-size:10px;word-break:break-all;"></span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Asking Price (SepoliaETH)</label>
+            <input type="number" id="input-price" placeholder="0.01" step="0.001" min="0.000001" />
+            <div class="field-hint">How much SepoliaETH you want for this image</div>
+          </div>
+          <div class="field">
+            <label>Buyer's Wallet Address</label>
+            <input type="text" id="input-buyer-addr" placeholder="0x..." />
+            <div class="field-hint">The buyer must use this exact wallet to view &amp; purchase</div>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <button class="btn btn-gold btn-full" id="btn-create-deal" style="padding:14px;">
+          <span class="spinner"></span>
+          <span class="btn-text">⬡ Create Deal on Blockchain</span>
+        </button>
+
+        <div id="deal-created-banner" style="display:none;margin-top:16px;">
+          <div class="setup-banner">
+            <div class="setup-banner-icon">✅</div>
+            <div>
+              <h3>Deal Created!</h3>
+              <p>Deal ID: <strong id="new-deal-id" style="color:var(--gold);font-family:var(--mono);">—</strong> — Share this ID with the buyer so they can view and respond to the deal.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active seller deals -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">📋</div>
+          <div><h2>Your Open Deals</h2><p>Deals you've created as seller — awaiting buyer response</p></div>
+        </div>
+        <div class="deal-list" id="seller-deals-list">
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>No deals yet. Create your first deal above.</p>
+          </div>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btn-refresh-seller" style="margin-top:14px;">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         VIEW: BUYER
+    ══════════════════════════════════════════════ -->
+    <div class="view" id="view-buyer">
+      <div class="view-header">
+        <h1>View a <em>Deal</em></h1>
+        <p>Enter a Deal ID to see the seller's offer. You'll see a protected preview — accept to pay, or reject to end the deal.</p>
+      </div>
+
+      <!-- Load deal -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">🔎</div>
+          <div><h2>Load Deal by ID</h2><p>The seller should share this ID with you</p></div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Deal ID</label>
+            <input type="number" id="input-deal-id" placeholder="0" min="0" step="1" />
+          </div>
+          <div class="field" style="display:flex;align-items:flex-end;">
+            <button class="btn btn-gold btn-full" id="btn-load-deal">
+              <span class="spinner"></span>
+              <span class="btn-text">Load Deal</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deal info -->
+      <div class="card" id="buyer-deal-card" style="display:none;">
+        <div class="card-head">
+          <div class="card-icon">📄</div>
+          <div>
+            <h2>Deal #<span id="b-deal-id">—</span></h2>
+            <p>Review the offer before deciding</p>
+          </div>
+        </div>
+
+        <!-- State steps -->
+        <div class="steps">
+          <div class="step" id="step-awaiting">
+            <div class="step-circle">1</div>
+            <div class="step-label">Awaiting<br>Decision</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" id="step-funded">
+            <div class="step-circle">2</div>
+            <div class="step-label">Accepted<br>&amp; Paid</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" id="step-terminal">
+            <div class="step-circle">3</div>
+            <div class="step-label">Rejected /<br>Cancelled</div>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-item-label">Status</div>
+            <div class="detail-item-value" id="b-state">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-item-label">Price</div>
+            <div class="detail-item-value highlight" id="b-price">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-item-label">Seller</div>
+            <div class="detail-item-value" id="b-seller">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-item-label">Buyer (you)</div>
+            <div class="detail-item-value" id="b-buyer">—</div>
+          </div>
+        </div>
+
+        <!-- Only show if AWAITING_DECISION -->
+        <div id="buyer-action-area" style="display:none;">
+          <button class="btn btn-gold btn-full" id="btn-view-image" style="margin-bottom:12px;padding:14px;">
+            <span class="btn-text">🔓 Preview Image &amp; Decide</span>
+          </button>
+          <p style="font-size:11px;color:var(--text3);text-align:center;line-height:1.6;">
+            The image is watermarked. You accept or reject inside the preview. No screenshots of the original.
+          </p>
+        </div>
+
+        <!-- Terminal states -->
+        <div id="buyer-terminal-area" style="display:none;">
+          <div class="setup-banner" id="buyer-terminal-banner">
+            <div class="setup-banner-icon" id="terminal-icon">ℹ</div>
+            <div>
+              <h3 id="terminal-title">Deal complete</h3>
+              <p id="terminal-body">This deal has been finalized.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         VIEW: MY DEALS
+    ══════════════════════════════════════════════ -->
+    <div class="view" id="view-my-deals">
+      <div class="view-header">
+        <h1>My <em>Deals</em></h1>
+        <p>All deals where you are involved — as seller or buyer.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">📤</div>
+          <div><h2>As Seller</h2><p>Deals you created</p></div>
+        </div>
+        <div class="deal-list" id="my-seller-list">
+          <div class="empty-state"><div class="empty-icon">📭</div><p>No seller deals found.</p></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon">🛒</div>
+          <div><h2>As Buyer</h2><p>Deals addressed to you</p></div>
+        </div>
+        <div class="deal-list" id="my-buyer-list">
+          <div class="empty-state"><div class="empty-icon">📭</div><p>No buyer deals found.</p></div>
+        </div>
+      </div>
+
+      <button class="btn btn-outline" id="btn-refresh-all">↻ Refresh All Deals</button>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════ -->
+<script>
+/* ───────────────────────────────────────────────────────────
+   ABI  (matches EscrowFactory.sol exactly)
+─────────────────────────────────────────────────────────── */
+const FACTORY_ABI = [
+  "function dealCount() view returns (uint256)",
+  "function createDeal(bytes32 imageHash, uint256 priceWei, address buyerAddr) returns (uint256)",
+  "function cancelDeal(uint256 dealId)",
+  "function acceptDeal(uint256 dealId) payable",
+  "function rejectDeal(uint256 dealId)",
+  "function getDeal(uint256 dealId) view returns (address seller, address buyer, uint256 price, bytes32 imageHash, uint8 state, uint256 createdAt)",
+  "function getStateLabel(uint256 dealId) view returns (string)",
+  "function getDealsAsSeller(address seller) view returns (uint256[])",
+  "function getDealsAsBuyer(address buyer) view returns (uint256[])",
+  "event DealCreated(uint256 indexed dealId, address indexed seller, address indexed buyer, uint256 price, bytes32 imageHash)",
+  "event DealAccepted(uint256 indexed dealId, address indexed buyer, uint256 price)",
+  "event DealRejected(uint256 indexed dealId, address indexed buyer)",
+  "event DealCancelled(uint256 indexed dealId, address indexed seller)"
+];
+
+/* ───────────────────────────────────────────────────────────
+   STATE
+─────────────────────────────────────────────────────────── */
+let provider    = null;
+let signer      = null;
+let factory     = null;
+let walletAddr  = null;
+let factoryAddr = null;
+let BYTECODE    = localStorage.getItem("vd_bytecode") || null;
+
+// Stores { [dealId]: base64DataURL } — seller side only
+const imageStore = JSON.parse(localStorage.getItem("vd_images") || "{}");
+let   pendingImageDataURL  = null;
+let   pendingImageHash     = null;
+let   activeBuyerDealId    = null;
+
+/* ───────────────────────────────────────────────────────────
+   UTILITY
+─────────────────────────────────────────────────────────── */
+function ts() {
+  return new Date().toTimeString().slice(0,8);
+}
+
+function log(msg, type = "info") {
+  const el = document.getElementById("main-log");
+  const line = document.createElement("div");
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-msg">${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function toast(msg, type = "ok") {
+  const icons = { ok: "✓", err: "✕", warn: "⚠" };
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span class="toast-icon">${icons[type] || "ℹ"}</span><span>${msg}</span>`;
+  document.getElementById("toast-container").appendChild(t);
+  setTimeout(() => t.remove(), 4200);
+}
+
+function setLoading(btn, on) {
+  btn.classList.toggle("loading", on);
+  btn.disabled = on;
+}
+
+function shortAddr(addr) {
+  return addr ? addr.slice(0,6) + "…" + addr.slice(-4) : "—";
+}
+
+function stateLabel(num) {
+  return ["AWAITING_DECISION","FUNDED","REJECTED","CANCELLED"][num] || "UNKNOWN";
+}
+
+function stateBadge(label) {
+  const map = {
+    AWAITING_DECISION: "awaiting",
+    FUNDED:            "funded",
+    REJECTED:          "rejected",
+    CANCELLED:         "cancelled"
+  };
+  const cls = map[label] || "cancelled";
+  const text = label.replace("_", " ");
+  return `<span class="badge badge-${cls}">${text}</span>`;
+}
+
+function saveImages() {
+  localStorage.setItem("vd_images", JSON.stringify(imageStore));
+}
+
+/* ───────────────────────────────────────────────────────────
+   NAVIGATION
+─────────────────────────────────────────────────────────── */
+document.querySelectorAll(".nav-btn[data-view]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const view = btn.dataset.view;
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    document.getElementById("view-" + view).classList.add("active");
+    document.querySelectorAll(".nav-btn[data-view]").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    if (view === "my-deals" && factory) refreshMyDeals();
+    if (view === "seller" && factory) refreshSellerDeals();
+  });
+});
+
+/* ───────────────────────────────────────────────────────────
+   WALLET CONNECTION
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-connect").addEventListener("click", connectWallet);
+document.getElementById("btn-switch-wallet").addEventListener("click", switchWallet);
+
+// knownWallets: { address -> { role: "seller"|"buyer"|"unknown" } }
+let knownWallets = {};
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    toast("MetaMask not found. Please install it.", "err");
+    log("MetaMask not detected. Install from metamask.io", "err");
+    return;
+  }
+  const btn = document.getElementById("btn-connect");
+  setLoading(btn, true);
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    await _finaliseWalletSwitch();
+
+    // Auto-load factory if saved
+    const saved = localStorage.getItem("vd_factory");
+    if (saved) {
+      document.getElementById("input-factory-addr").value = saved;
+      await loadFactory(saved);
+    }
+  } catch (e) {
+    log("Connection error: " + e.message, "err");
+    toast("Wallet connection failed.", "err");
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function switchWallet() {
+  if (!window.ethereum) { toast("MetaMask not found.", "err"); return; }
+  const btn = document.getElementById("btn-switch-wallet");
+  setLoading(btn, true);
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    // Force MetaMask to show account picker
+    await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
+    await _finaliseWalletSwitch();
+  } catch (e) {
+    if (e.code === 4001) {
+      toast("Account switch cancelled.", "warn");
+    } else {
+      log("Switch error: " + e.message, "err");
+      toast("Could not switch account.", "err");
+    }
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+async function _finaliseWalletSwitch() {
+  signer     = await provider.getSigner();
+  walletAddr = await signer.getAddress();
+  const net  = await provider.getNetwork();
+
+  // Register in knownWallets if new
+  if (!knownWallets[walletAddr.toLowerCase()]) {
+    knownWallets[walletAddr.toLowerCase()] = { address: walletAddr, role: "unknown" };
+  }
+
+  _renderWalletUI(net);
+  _updateWalletRole();
+
+  log(`Wallet active: ${walletAddr}`, "ok");
+  log(`Network: ${net.name || "unknown"} (chainId ${net.chainId})`, "info");
+
+  if (Number(net.chainId) !== 11155111) {
+    toast("⚠ Switch to Sepolia testnet!", "warn");
+    log("WARNING: You are not on Sepolia. Switch networks in MetaMask.", "warn");
+  } else {
+    toast("Wallet connected — Sepolia ✓", "ok");
+  }
+}
+
+function _renderWalletUI(net) {
+  document.getElementById("btn-connect").style.display = "none";
+  document.getElementById("btn-switch-wallet").style.display = "block";
+
+  const addrEl = document.getElementById("wallet-addr");
+  const netEl  = document.getElementById("wallet-net");
+  addrEl.textContent = shortAddr(walletAddr);
+  addrEl.style.display = "block";
+  netEl.textContent  = net ? "Chain ID: " + net.chainId : "";
+  netEl.style.display = "block";
+
+  _renderWalletSlots();
+}
+
+function _renderWalletSlots() {
+  const container = document.getElementById("wallet-slots");
+  container.innerHTML = "";
+  const wallets = Object.values(knownWallets);
+  if (wallets.length < 2) return; // only show slots when >1 wallet known
+
+  wallets.forEach(w => {
+    const isActive = w.address.toLowerCase() === walletAddr.toLowerCase();
+    const slot = document.createElement("div");
+    slot.className = "wallet-slot" + (isActive ? " active" : "");
+    slot.title = w.address;
+    slot.innerHTML = `
+      <div class="wallet-slot-dot"></div>
+      <div class="wallet-slot-info">
+        <div class="wallet-slot-addr">${shortAddr(w.address)}</div>
+        <div class="wallet-slot-role">${w.role === "unknown" ? "—" : w.role}</div>
+      </div>
+    `;
+    if (!isActive) {
+      slot.addEventListener("click", () => _switchToKnownWallet(w.address));
+    }
+    container.appendChild(slot);
+  });
+}
+
+async function _switchToKnownWallet(targetAddr) {
+  // Ask MetaMask to switch — it will show picker if it needs to
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    const accounts = await provider.send("eth_requestAccounts", []);
+    // Check if target is already in available accounts
+    const match = accounts.find(a => a.toLowerCase() === targetAddr.toLowerCase());
+    if (match) {
+      // MetaMask already has this account; just re-read the active signer
+      // (MetaMask doesn't let JS force a specific account — user must pick)
+      await _finaliseWalletSwitch();
+    } else {
+      // Target wallet not in MetaMask — ask user to switch manually
+      await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
+      await _finaliseWalletSwitch();
+    }
+  } catch(e) {
+    if (e.code !== 4001) toast("Could not switch: " + e.message, "err");
+  }
+}
+
+function _updateWalletRole() {
+  const badge = document.getElementById("wallet-role-badge");
+  const entry = knownWallets[walletAddr.toLowerCase()];
+  const role  = entry ? entry.role : "unknown";
+  badge.textContent = role === "seller" ? "🔵 Seller" : role === "buyer" ? "🟢 Buyer" : "⚪ Unknown Role";
+  badge.className   = "wallet-role-badge " + role;
+  badge.style.display = "inline-block";
+}
+
+function setWalletRole(addr, role) {
+  const key = addr.toLowerCase();
+  if (!knownWallets[key]) knownWallets[key] = { address: addr, role };
+  else knownWallets[key].role = role;
+  if (addr.toLowerCase() === walletAddr.toLowerCase()) _updateWalletRole();
+  _renderWalletSlots();
+}
+
+// Listen for MetaMask account changes (user switches in MetaMask extension)
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", async (accounts) => {
+    if (!accounts.length) return;
+    provider   = new ethers.BrowserProvider(window.ethereum);
+    const net  = await provider.getNetwork();
+    signer     = await provider.getSigner();
+    walletAddr = await signer.getAddress();
+    if (!knownWallets[walletAddr.toLowerCase()]) {
+      knownWallets[walletAddr.toLowerCase()] = { address: walletAddr, role: "unknown" };
+    }
+    _renderWalletUI(net);
+    _updateWalletRole();
+    toast("Account switched to " + shortAddr(walletAddr), "ok");
+    log("Account changed: " + walletAddr, "info");
+  });
+}
+
+/* ───────────────────────────────────────────────────────────
+   FACTORY DEPLOY
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-deploy-factory").addEventListener("click", async () => {
+  if (!signer) { toast("Connect wallet first.", "err"); return; }
+  const raw = document.getElementById("input-bytecode").value.trim();
+  if (!raw || raw.length < 200) { toast("Paste valid bytecode first.", "err"); return; }
+
+  const btn = document.getElementById("btn-deploy-factory");
+  setLoading(btn, true);
+  try {
+    BYTECODE = raw;
+    localStorage.setItem("vd_bytecode", raw);
+    const cf = new ethers.ContractFactory(FACTORY_ABI, BYTECODE, signer);
+    log("Deploying EscrowFactory…", "info");
+    const deployed = await cf.deploy();
+    log("Tx sent: " + deployed.deploymentTransaction().hash, "info");
+    await deployed.waitForDeployment();
+    const addr = await deployed.getAddress();
+    log("Factory deployed at: " + addr, "ok");
+    toast("Factory deployed! Address: " + shortAddr(addr), "ok");
+    localStorage.setItem("vd_factory", addr);
+    await loadFactory(addr);
+  } catch (e) {
+    log("Deploy error: " + e.message, "err");
+    toast("Deployment failed.", "err");
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+/* ───────────────────────────────────────────────────────────
+   FACTORY LOAD
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-load-factory").addEventListener("click", async () => {
+  if (!signer) { toast("Connect wallet first.", "err"); return; }
+  const addr = document.getElementById("input-factory-addr").value.trim();
+  if (!ethers.isAddress(addr)) { toast("Invalid address.", "err"); return; }
+  const btn = document.getElementById("btn-load-factory");
+  setLoading(btn, true);
+  await loadFactory(addr);
+  setLoading(btn, false);
+});
+
+async function loadFactory(addr) {
+  try {
+    factory = new ethers.Contract(addr, FACTORY_ABI, signer);
+    const count = await factory.dealCount();
+    factoryAddr = addr;
+    localStorage.setItem("vd_factory", addr);
+    document.getElementById("factory-addr-display").textContent = shortAddr(addr);
+    document.getElementById("input-factory-addr").value = addr;
+    log(`Factory loaded: ${addr} — ${count} total deals`, "ok");
+    toast("Factory connected ✓", "ok");
+    listenEvents();
+  } catch (e) {
+    log("Factory load error: " + e.message, "err");
+    toast("Failed to connect factory.", "err");
+  }
+}
+
+/* ───────────────────────────────────────────────────────────
+   IMAGE UPLOAD — SELLER
+─────────────────────────────────────────────────────────── */
+const uploadZone = document.getElementById("upload-zone");
+const imageInput = document.getElementById("input-image");
+
+uploadZone.addEventListener("dragover", e => { e.preventDefault(); uploadZone.classList.add("dragover"); });
+uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("dragover"));
+uploadZone.addEventListener("drop", e => {
+  e.preventDefault();
+  uploadZone.classList.remove("dragover");
+  const f = e.dataTransfer.files[0];
+  if (f) handleImageFile(f);
+});
+imageInput.addEventListener("change", () => {
+  if (imageInput.files[0]) handleImageFile(imageInput.files[0]);
+});
+
+// Block context menu on any image in the page
+document.addEventListener("contextmenu", e => {
+  if (e.target.tagName === "IMG") e.preventDefault();
+}, true);
+
+async function handleImageFile(file) {
+  if (!file.type.startsWith("image/")) { toast("Please select an image file.", "err"); return; }
+  if (file.size > 5 * 1024 * 1024) { toast("Image must be < 5 MB.", "err"); return; }
+
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const dataURL = ev.target.result;
+    pendingImageDataURL = dataURL;
+
+    // Show preview
+    const previewImg  = document.getElementById("seller-preview-img");
+    const previewWrap = document.getElementById("seller-preview-wrap");
+    previewImg.src = dataURL;
+    previewWrap.classList.add("visible");
+
+    // Compute hash using SubtleCrypto
+    const arrayBuf = await file.arrayBuffer();
+    const hashBuf  = await crypto.subtle.digest("SHA-256", arrayBuf);
+    const hashHex  = "0x" + Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,"0")).join("");
+    pendingImageHash = hashHex;
+
+    document.getElementById("img-hash-display").style.display = "block";
+    document.getElementById("img-hash-val").textContent = hashHex;
+    log("Image loaded. Hash: " + hashHex.slice(0,20) + "…", "ok");
+    toast("Image ready ✓", "ok");
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ───────────────────────────────────────────────────────────
+   CREATE DEAL — SELLER
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-create-deal").addEventListener("click", async () => {
+  if (!factory) { toast("Connect factory first.", "err"); return; }
+  if (!pendingImageHash) { toast("Upload an image first.", "err"); return; }
+
+  const priceEth = parseFloat(document.getElementById("input-price").value);
+  if (!priceEth || priceEth <= 0) { toast("Enter a valid price.", "err"); return; }
+
+  const buyerAddr = document.getElementById("input-buyer-addr").value.trim();
+  if (!ethers.isAddress(buyerAddr)) { toast("Enter a valid buyer address.", "err"); return; }
+
+  const btn = document.getElementById("btn-create-deal");
+  setLoading(btn, true);
+  try {
+    const priceWei = ethers.parseEther(priceEth.toString());
+    const hashBytes32 = pendingImageHash.padEnd(66, "0").slice(0, 66);
+
+    log(`Creating deal: price=${priceEth} ETH, buyer=${shortAddr(buyerAddr)}`, "info");
+    const tx = await factory.createDeal(hashBytes32, priceWei, buyerAddr);
+    log("Tx sent: " + tx.hash, "info");
+    const receipt = await tx.wait();
+
+    // Extract dealId from event
+    const iface = new ethers.Interface(FACTORY_ABI);
+    let dealId = null;
+    for (const logEntry of receipt.logs) {
+      try {
+        const parsed = iface.parseLog(logEntry);
+        if (parsed.name === "DealCreated") {
+          dealId = Number(parsed.args.dealId);
+          break;
+        }
+      } catch {}
+    }
+
+    if (dealId === null) {
+      const count = await factory.dealCount();
+      dealId = Number(count) - 1;
+    }
+
+    // Save image to localStorage keyed by dealId
+    imageStore[dealId] = pendingImageDataURL;
+    saveImages();
+
+    log(`Deal #${dealId} created on-chain ✓`, "ok");
+    toast(`Deal #${dealId} created! Share this ID with the buyer.`, "ok");
+    setWalletRole(walletAddr, "seller");
+
+    document.getElementById("new-deal-id").textContent = dealId;
+    document.getElementById("deal-created-banner").style.display = "block";
+
+    // Reset form
+    pendingImageDataURL = null;
+    pendingImageHash    = null;
+    document.getElementById("seller-preview-wrap").classList.remove("visible");
+    document.getElementById("img-hash-display").style.display = "none";
+    document.getElementById("input-price").value = "";
+    document.getElementById("input-buyer-addr").value = "";
+    document.getElementById("upload-zone").classList.remove("dragover");
+
+    await refreshSellerDeals();
+
+  } catch (e) {
+    log("Create deal error: " + (e.reason || e.message), "err");
+    toast("Failed to create deal.", "err");
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+/* ───────────────────────────────────────────────────────────
+   SELLER DEALS REFRESH
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-refresh-seller").addEventListener("click", refreshSellerDeals);
+
+async function refreshSellerDeals() {
+  if (!factory || !walletAddr) return;
+  try {
+    const ids = await factory.getDealsAsSeller(walletAddr);
+    renderDealList(document.getElementById("seller-deals-list"), ids, "seller");
+  } catch (e) {
+    log("Refresh seller deals error: " + e.message, "err");
+  }
+}
+
+/* ───────────────────────────────────────────────────────────
+   LOAD DEAL — BUYER
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-load-deal").addEventListener("click", async () => {
+  if (!factory) { toast("Connect factory first.", "err"); return; }
+  const dealIdRaw = document.getElementById("input-deal-id").value.trim();
+  if (dealIdRaw === "") { toast("Enter a Deal ID.", "err"); return; }
+  const btn = document.getElementById("btn-load-deal");
+  setLoading(btn, true);
+  await loadBuyerDeal(parseInt(dealIdRaw));
+  setLoading(btn, false);
+});
+
+async function loadBuyerDeal(dealId) {
+  try {
+    const d = await factory.getDeal(dealId);
+    const label = stateLabel(Number(d.state));
+    activeBuyerDealId = dealId;
+
+    document.getElementById("b-deal-id").textContent = dealId;
+    document.getElementById("b-state").innerHTML     = stateBadge(label);
+    document.getElementById("b-price").textContent   = ethers.formatEther(d.price) + " ETH";
+    document.getElementById("b-seller").textContent  = shortAddr(d.seller);
+    document.getElementById("b-buyer").textContent   = shortAddr(d.buyer);
+
+    // Step indicator
+    ["step-awaiting","step-funded","step-terminal"].forEach(s =>
+      document.getElementById(s).classList.remove("active","done")
+    );
+    if (label === "AWAITING_DECISION") {
+      document.getElementById("step-awaiting").classList.add("active");
+    } else if (label === "FUNDED") {
+      document.getElementById("step-awaiting").classList.add("done");
+      document.getElementById("step-funded").classList.add("active");
+    } else {
+      document.getElementById("step-awaiting").classList.add("done");
+      document.getElementById("step-terminal").classList.add("active");
+    }
+
+    document.getElementById("buyer-deal-card").style.display = "block";
+
+    // Check if current user is the buyer
+    const isThisBuyer = walletAddr && d.buyer.toLowerCase() === walletAddr.toLowerCase();
+    // Store globally so the modal can check it
+    window._isThisBuyer = isThisBuyer;
+    window._buyerAddr   = d.buyer;
+
+    // Auto-tag roles in the wallet switcher
+    if (isThisBuyer) setWalletRole(walletAddr, "buyer");
+
+    if (label === "AWAITING_DECISION") {
+      // Always show the preview button — modal will lock Accept/Reject if wrong wallet
+      document.getElementById("buyer-action-area").style.display = "block";
+      document.getElementById("buyer-terminal-area").style.display = "none";
+
+      // Show/remove wallet mismatch warning
+      const area = document.getElementById("buyer-action-area");
+      const existingNote = area.querySelector(".wallet-mismatch-note");
+      if (!isThisBuyer) {
+        if (!existingNote) {
+          const note = document.createElement("p");
+          note.className = "wallet-mismatch-note";
+          note.style.cssText = "margin-top:10px;font-size:13px;color:var(--gold);opacity:0.9;";
+          note.innerHTML = `&#9888;&nbsp;Connected wallet is not the buyer for this deal. You can preview the image, but you\'ll need to switch to <code style="font-size:11px;">${d.buyer.slice(0,8)}…${d.buyer.slice(-6)}</code> in MetaMask to accept or reject.`;
+          area.appendChild(note);
+        }
+      } else {
+        if (existingNote) existingNote.remove();
+      }
+    } else {
+      document.getElementById("buyer-action-area").style.display = "none";
+      document.getElementById("buyer-terminal-area").style.display = "block";
+      const msgs = {
+        FUNDED:    { icon: "✅", title: "Deal Accepted & Paid", body: "Payment was sent to the seller. Deal is complete." },
+        REJECTED:  { icon: "❌", title: "Deal Rejected", body: "You rejected this deal. No funds were transferred." },
+        CANCELLED: { icon: "🚫", title: "Deal Cancelled", body: "The seller cancelled this deal before it was decided." }
+      };
+      const m = msgs[label] || { icon: "ℹ", title: label, body: "" };
+      document.getElementById("terminal-icon").textContent  = m.icon;
+      document.getElementById("terminal-title").textContent = m.title;
+      document.getElementById("terminal-body").textContent  = m.body;
+    }
+
+    log(`Deal #${dealId} loaded — state: ${label}`, "ok");
+  } catch (e) {
+    log("Load deal error: " + e.message, "err");
+    toast("Failed to load deal.", "err");
+  }
+}
+
+/* ───────────────────────────────────────────────────────────
+   BUYER — VIEW IMAGE (modal)
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-view-image").addEventListener("click", async () => {
+  if (activeBuyerDealId === null) return;
+
+  // Try to get image from store
+  const imgData = imageStore[activeBuyerDealId];
+  if (!imgData) {
+    toast("Image not available locally. The seller must share this file with you.", "warn");
+    log("Image for deal #" + activeBuyerDealId + " not in local store. Seller must share the image file.", "warn");
+    return;
+  }
+
+  // Get deal price
+  const d = await factory.getDeal(activeBuyerDealId);
+  const priceEth = ethers.formatEther(d.price);
+
+  openImageModal(imgData, priceEth + " ETH");
+});
+
+function openImageModal(imgDataURL, priceText) {
+  const container = document.getElementById("modal-img-container");
+  const isThisBuyer = window._isThisBuyer;
+
+  // Lock or unlock Accept/Reject based on wallet match
+  const acceptBtn = document.getElementById("modal-accept");
+  const rejectBtn = document.getElementById("modal-reject");
+  const existingWarn = document.getElementById("modal-wallet-warn");
+  if (existingWarn) existingWarn.remove();
+
+  if (!isThisBuyer) {
+    acceptBtn.disabled = true;
+    acceptBtn.style.opacity = "0.35";
+    acceptBtn.title = "Switch to the buyer wallet to accept";
+    rejectBtn.disabled = true;
+    rejectBtn.style.opacity = "0.35";
+    rejectBtn.title = "Switch to the buyer wallet to reject";
+
+    const warn = document.createElement("p");
+    warn.id = "modal-wallet-warn";
+    warn.style.cssText = "margin:10px 0 0;font-size:12px;color:var(--gold);text-align:center;";
+    const short = window._buyerAddr ? `${window._buyerAddr.slice(0,8)}…${window._buyerAddr.slice(-6)}` : "the buyer wallet";
+    warn.innerHTML = `&#9888;&nbsp;Switch MetaMask to <code style="font-size:11px;">${short}</code> to accept or reject.`;
+    rejectBtn.parentNode.insertBefore(warn, rejectBtn.nextSibling);
+  } else {
+    acceptBtn.disabled = false;
+    acceptBtn.style.opacity = "";
+    acceptBtn.title = "";
+    rejectBtn.disabled = false;
+    rejectBtn.style.opacity = "";
+    rejectBtn.title = "";
+  }
+
+  // Build protected image with watermark SVG
+  container.innerHTML = `
+    <img
+      src="${imgDataURL}"
+      alt="Protected Preview"
+      draggable="false"
+      oncontextmenu="return false"
+      style="width:100%;max-height:360px;object-fit:contain;display:block;pointer-events:none;-webkit-user-drag:none;"
+    />
+    <div class="watermark-layer">
+      <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" style="position:absolute;top:0;left:0;pointer-events:none;">
+        <defs>
+          <pattern id="wm" x="0" y="0" width="300" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
+            <text x="10" y="40" font-family="monospace" font-size="12" fill="rgba(201,168,76,0.28)" letter-spacing="2">PREVIEW ONLY · VAULTDEAL</text>
+            <text x="10" y="80" font-family="monospace" font-size="10" fill="rgba(201,168,76,0.18)" letter-spacing="1">NOT FOR DISTRIBUTION</text>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#wm)"/>
+      </svg>
+    </div>
+  `;
+
+  document.getElementById("modal-price").textContent = priceText;
+  document.getElementById("buyer-modal").classList.add("open");
+}
+
+document.getElementById("modal-close").addEventListener("click", () => {
+  document.getElementById("buyer-modal").classList.remove("open");
+});
+
+// Accept deal from modal
+document.getElementById("modal-accept").addEventListener("click", async () => {
+  if (activeBuyerDealId === null) return;
+  const btn = document.getElementById("modal-accept");
+  setLoading(btn, true);
+  try {
+    const d = await factory.getDeal(activeBuyerDealId);
+    log(`Accepting deal #${activeBuyerDealId}, paying ${ethers.formatEther(d.price)} ETH…`, "info");
+    const tx = await factory.acceptDeal(activeBuyerDealId, { value: d.price });
+    log("Tx sent: " + tx.hash, "info");
+    await tx.wait();
+    log(`Deal #${activeBuyerDealId} accepted — ${ethers.formatEther(d.price)} ETH sent to seller ✓`, "ok");
+    toast("Payment sent! Deal complete ✓", "ok");
+    document.getElementById("buyer-modal").classList.remove("open");
+    await loadBuyerDeal(activeBuyerDealId);
+  } catch (e) {
+    log("Accept error: " + (e.reason || e.message), "err");
+    toast("Payment failed: " + (e.reason || "check MetaMask"), "err");
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+// Reject deal from modal
+document.getElementById("modal-reject").addEventListener("click", async () => {
+  if (activeBuyerDealId === null) return;
+  const btn = document.getElementById("modal-reject");
+  setLoading(btn, true);
+  try {
+    log(`Rejecting deal #${activeBuyerDealId}…`, "info");
+    const tx = await factory.rejectDeal(activeBuyerDealId);
+    log("Tx sent: " + tx.hash, "info");
+    await tx.wait();
+    log(`Deal #${activeBuyerDealId} rejected — deal terminated, no funds moved`, "ok");
+    toast("Deal rejected. Terminated with no payment.", "ok");
+    document.getElementById("buyer-modal").classList.remove("open");
+    await loadBuyerDeal(activeBuyerDealId);
+  } catch (e) {
+    log("Reject error: " + (e.reason || e.message), "err");
+    toast("Rejection failed.", "err");
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+/* ───────────────────────────────────────────────────────────
+   MY DEALS VIEW
+─────────────────────────────────────────────────────────── */
+document.getElementById("btn-refresh-all").addEventListener("click", refreshMyDeals);
+
+async function refreshMyDeals() {
+  if (!factory || !walletAddr) { toast("Connect wallet and factory first.", "warn"); return; }
+  try {
+    const sellerIds = await factory.getDealsAsSeller(walletAddr);
+    const buyerIds  = await factory.getDealsAsBuyer(walletAddr);
+    renderDealList(document.getElementById("my-seller-list"), sellerIds, "seller");
+    renderDealList(document.getElementById("my-buyer-list"),  buyerIds,  "buyer");
+  } catch (e) {
+    log("Refresh error: " + e.message, "err");
+  }
+}
+
+async function renderDealList(container, ids, role) {
+  container.innerHTML = "";
+  if (!ids || ids.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><p>No deals found.</p></div>`;
+    return;
+  }
+
+  for (const idBig of [...ids].reverse()) {
+    const id = Number(idBig);
+    try {
+      const d = await factory.getDeal(id);
+      const label = stateLabel(Number(d.state));
+      const div = document.createElement("div");
+      div.className = "deal-card";
+      const counterpart = role === "seller"
+        ? "Buyer: " + shortAddr(d.buyer)
+        : "Seller: " + shortAddr(d.seller);
+
+      div.innerHTML = `
+        <div class="deal-card-id">#${id}</div>
+        <div class="deal-card-body">
+          <div class="deal-card-title">${stateBadge(label)}</div>
+          <div class="deal-card-meta">
+            <span>${counterpart}</span>
+            <span>${new Date(Number(d.createdAt) * 1000).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <div class="deal-card-price">${ethers.formatEther(d.price)} ETH</div>
+        <div class="deal-card-arrow">›</div>
+      `;
+
+      div.addEventListener("click", () => {
+        // Navigate to buyer view for the deal
+        document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+        document.getElementById("view-buyer").classList.add("active");
+        document.querySelectorAll(".nav-btn[data-view]").forEach(b => b.classList.remove("active"));
+        document.querySelector('.nav-btn[data-view="buyer"]').classList.add("active");
+        document.getElementById("input-deal-id").value = id;
+        loadBuyerDeal(id);
+      });
+
+      container.appendChild(div);
+    } catch {}
+  }
+}
+
+/* ───────────────────────────────────────────────────────────
+   ON-CHAIN EVENT LISTENERS
+─────────────────────────────────────────────────────────── */
+function listenEvents() {
+  if (!factory) return;
+  factory.on("DealCreated",   (id, seller, buyer, price) =>
+    log(`[EVENT] Deal #${id} created — seller:${shortAddr(seller)} buyer:${shortAddr(buyer)} price:${ethers.formatEther(price)}ETH`, "ok")
+  );
+  factory.on("DealAccepted",  (id, buyer, price) =>
+    log(`[EVENT] Deal #${id} accepted — buyer:${shortAddr(buyer)} paid ${ethers.formatEther(price)}ETH`, "ok")
+  );
+  factory.on("DealRejected",  (id, buyer) =>
+    log(`[EVENT] Deal #${id} rejected by ${shortAddr(buyer)}`, "warn")
+  );
+  factory.on("DealCancelled", (id, seller) =>
+    log(`[EVENT] Deal #${id} cancelled by seller ${shortAddr(seller)}`, "warn")
+  );
+}
+
+/* ───────────────────────────────────────────────────────────
+   INIT
+─────────────────────────────────────────────────────────── */
+window.addEventListener("load", () => {
+  if (typeof ethers === "undefined") {
+    log("ERROR: ethers.js failed to load. Refresh the page.", "err");
+    toast("ethers.js not loaded — refresh page.", "err");
+    document.getElementById("btn-connect").disabled = true;
+    return;
+  }
+  if (!window.ethereum) {
+    log("No wallet detected. Install MetaMask and refresh.", "err");
+  } else {
+    log("Wallet detected. Click Connect Wallet to begin.", "ok");
+  }
+  log("VaultDeal v2 loaded. Factory pattern: deploy once, deal forever.", "info");
+});
+</script>
+</body>
+</html>
